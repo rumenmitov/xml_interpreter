@@ -1,35 +1,39 @@
 #[derive(PartialEq, Debug)]
 struct Element {
-    attribute: String,
+    name: String,
+    attribute: Attribute,
     children: Vec<Element>,
 }
 
 impl Element {
     fn new() -> Element {
         Element {
-            attribute: String::new(),
+            name: String::new(),
+            attribute: (String::new(), String::new()),
             children: Vec::new(),
         }
     }
 }
 
+type Attribute = (String, String);
+
 type ParseResult<'a> = Result<(Element, String), &'a str>;
 
-fn parse<'a>(input: String, mut parent: Element) -> ParseResult<'a> {
+fn parse<'a>(input: &str, mut parent: Element) -> ParseResult<'a> {
     let mut element = Element::new();
     let mut rest_of_input = String::new();
 
     if input.starts_with("<") {
-        let extraction_result = extract_attribute(&input[1..]).unwrap();
-        element.attribute = extraction_result.0;
+        let extraction_result = extract_name(&input[1..]).unwrap();
+        element.name = extraction_result.0;
         rest_of_input = extraction_result.1;
     }
 
-    if element.attribute == parent.attribute {
+    if element.name == parent.name {
         return Ok((parent, rest_of_input));
     }
 
-    let final_result = parse(rest_of_input, element)?;
+    let final_result = parse(&rest_of_input, element)?;
     element = final_result.0;
     rest_of_input = final_result.1.to_string();
 
@@ -40,25 +44,57 @@ fn parse<'a>(input: String, mut parent: Element) -> ParseResult<'a> {
     Ok((parent, rest_of_input))
 }
 
-fn extract_attribute(input: &str) -> Result<Box<(String, String)>, &str> {
+fn extract_name(input: &str) -> Result<Box<(String, String)>, &str> {
     let mut result = String::new();
-    let mut it = input.chars();
+    let mut it = input.char_indices();
 
-    while let Some(ch) = it.next() {
+    while let Some((i, ch)) = it.next() {
         if ch.is_alphanumeric() {
             result.push(ch);
-        } else {
-            break;
+        } else if ch == ' ' {
+            extract_attributes(&input[i..]);
         }
     }
 
     let mut rest_of_input = String::new();
 
-    while let Some(ch) = it.next() {
-        rest_of_input += &ch.to_string();
+    if let Some((i, _)) = it.next() {
+        rest_of_input = input[i..].to_string();
     }
 
     Ok(Box::from((result, rest_of_input)))
+}
+
+fn extract_attributes(input :&str) -> Result<Box<Vec<Attribute>>, &str> {
+    let mut attribute = (String::new(), String::new());
+    let mut attributes = Vec::new();
+    let mut it = input.chars();
+
+    while let Some(ch) = it.next() {
+        if ch.is_alphabetic() {
+            attribute.0.push(ch);
+        } else if ch == '=' {
+            break;
+        } else {
+            return Err("Missing '=' in attribute assignment.")
+        }
+    }
+
+    while let Some(ch) = it.next() {
+        if ch.is_alphanumeric() {
+            attribute.1.push(ch);
+        } else if ch == ' '{
+            attributes.push((attribute.0, attribute.1));
+            attribute.0 = String::new();
+            attribute.1 = String::new();
+        } else if ch == '/' && it.next() == Some('>') {
+            break;
+        } else {
+            return Err("Attribute value set incorrectly!");
+        }
+    }
+
+    return Ok(Box::new(attributes));
 }
 
 #[cfg(test)]
