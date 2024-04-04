@@ -1,33 +1,7 @@
-type Attribute = (String, String);
-type ParseResult<'a> = Result<(Element, String), String>;
+mod types;
+use crate::types::*;
 
-#[derive(PartialEq, Debug)]
-struct Element {
-    name: String,
-    attributes: Vec<Attribute>,
-    children: Vec<Element>,
-}
-
-impl Element {
-    fn new() -> Element {
-        Element {
-            name: String::new(),
-            attributes: Vec::new(),
-            children: Vec::new(),
-        }
-    }
-
-    fn new_root() -> Element {
-        let mut root = Element::new();
-        root.name = "root".to_string();
-        return root;
-    }
-}
-
-
-
-fn parse<'a>(input: &str, mut parent: Element) -> ParseResult<'a> {
-    println!("INPUT: {:?}", input);
+fn parse<'a>(input: &str, mut parent: Element) -> Result<(Element, String), String> {
     if input.is_empty() {
         return Ok((parent, String::new()));
     }
@@ -37,11 +11,14 @@ fn parse<'a>(input: &str, mut parent: Element) -> ParseResult<'a> {
     }
 
     let name = extract_name(&input[1..]).unwrap();
-    if name.0 == '/'.to_string() + &parent.name {
-        if !name.1.starts_with(">") {
-            return Err("Closing tag incorrect: ".to_string() + &name.1);
+
+    if let Some(prev_child) = parent.children.last() {
+        if name.0 == prev_child.name {
+            if !name.1.starts_with(">") {
+                return Err("Closing tag incorrect: ".to_string() + &name.1);
+            }
+            return Ok((parent, name.1[1..].to_string()));
         }
-        return Ok((parent, name.1[(1 + name.0.len())..].to_string()));
     }
 
     if name.1.starts_with("/>") {
@@ -77,7 +54,7 @@ fn parse<'a>(input: &str, mut parent: Element) -> ParseResult<'a> {
     let (element, rest_of_input) = parse(&attributes.1, element).unwrap();
     parent.children.push(element);
 
-    return Ok((parent, rest_of_input));
+    return parse(&rest_of_input, parent);
 }
 
 fn extract_name(input: &str) -> Result<Box<(String, String)>, String> {
@@ -112,6 +89,10 @@ fn extract_attributes(input :&str) -> Result<Box<(Vec<Attribute>, String)>, Stri
     let mut it = input.char_indices();
 
     if let Some((i, ch)) = it.next() {
+        if ch == '<' {
+            return Ok(Box::from((vec!(), String::from(&input[i..]))));
+        }
+
         if ch == '/' || ch == ' ' || ch == '>' {
             return Ok(Box::from((vec!(), String::from(&input[(i+1)..]))));
         }
@@ -162,84 +143,4 @@ fn extract_attributes(input :&str) -> Result<Box<(Vec<Attribute>, String)>, Stri
     return Ok(Box::new((attributes, rest_of_attributes.1)));
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_extract_attribute() {
-        assert_eq!(
-            extract_attributes("hello=world text=5"),
-            Ok(Box::from((
-                        vec!(
-                            ("hello".to_string(), "world".to_string()),
-                            ("text".to_string(), "5".to_string())
-                             ), 
-                        String::from("")
-                        )))
-        );
-
-        assert_eq!(
-            extract_attributes("!hello"),
-            Err("Error parsing attribute: !hello".to_string())
-        );
-    }
-
-    #[test]
-    fn test_extract_name() {
-        assert_eq!(
-            extract_name("hello>"),
-            Ok(
-                Box::from(("hello".to_string(), ">".to_string())))
-            );
-
-        assert_eq!(
-            extract_name("hello/>"),
-            Ok(
-                Box::from(("hello".to_string(), "/>".to_string())))
-            );
-
-        assert_eq!(
-            extract_name("5hello>"),
-            Err("Invalid character when extracting name: 5".to_string())
-            );
-    }
-
-    #[test]
-    fn test_parse() {
-        let mut element = Element::new_root();
-
-        let mut element_solution = Element::new_root();
-        element_solution.children = vec!(Element::new());
-
-        assert_eq!(
-            parse("<hello></hello>", element).unwrap(),
-            (element_solution, "".to_string())
-        );
-
-        element = Element::new_root();
-
-        element_solution = Element::new_root();
-        element_solution.children = vec!(
-            Element {
-                name: "hello".to_string(),
-                attributes: vec!(
-                    ("size".to_string(), "10".to_string()),
-                    ("text".to_string(), "5".to_string())
-                    ),
-                    children: vec!(
-                        Element {
-                            name: "nested".to_string(),
-                            attributes: vec!(),
-                            children: vec!(),
-                        }
-                        ),
-            }
-        );
-
-        assert_eq!(
-            parse("<hello size=10 text=5><nested></nested></hello>", element).unwrap(),
-            (element_solution, "".to_string())
-        );
-    }
-}
+mod tests;
