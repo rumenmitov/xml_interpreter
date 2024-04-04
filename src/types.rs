@@ -23,6 +23,39 @@ impl Element {
 
         return root;
     }
+
+    pub fn print(&self, distance_from_root :u8) -> String {
+        let mut tab_offset = String::new();
+        for _ in 1..distance_from_root {
+            tab_offset.push('\t');
+        }
+
+        let mut res = String::from(&self.name);
+
+        for (name, val) in &self.attributes {
+            res += ", ";
+            res += name;
+            res += "=";
+            res += val;
+        }
+
+        if !self.children.is_empty() {
+            tab_offset.push('\t');
+
+            res.push('\n');
+            res += &tab_offset;
+            res += "|\n";
+
+            for child in &self.children {
+                res += &tab_offset;
+                res += "-->";
+
+                res += &child.print(distance_from_root + 1);
+
+                res.push('\n');
+            }
+        }
+        
+        return res;
+    }
 }
-
-
