@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "xml_interpreter_2"
+name = "xml_interpreter"
 version = "0.1.0"

@@ -20,7 +20,7 @@
 
 
 mod types;
-use crate::types::*;
+pub use crate::types::*;
 
 
 /// Parses a string (with no `\n`) and returns the filled-in parent element 

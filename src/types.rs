@@ -27,7 +27,8 @@ impl Element {
     pub fn print(&self, distance_from_root :u8) -> String {
         let mut tab_offset = String::new();
         for _ in 1..distance_from_root {
-            tab_offset.push('\t');
+            tab_offset.push(' ');
+            tab_offset.push(' ');
         }
 
         let mut res = String::from(&self.name);
@@ -40,7 +41,8 @@ impl Element {
         }
 
         if !self.children.is_empty() {
-            tab_offset.push('\t');
+            tab_offset.push(' ');
+            tab_offset.push(' ');
 
             res.push('\n');
             res += &tab_offset;
