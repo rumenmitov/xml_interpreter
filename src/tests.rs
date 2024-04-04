@@ -50,7 +50,7 @@ fn test_parse() {
 #[test]
 fn test_extract_attribute() {
     assert_eq!(
-        extract_attributes("hello=world text=5"),
+        extract_attributes("hello=world text=5>"),
         Ok(Box::from((
                     vec!(
                         ("hello".to_string(), "world".to_string()),

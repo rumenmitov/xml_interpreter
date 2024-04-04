@@ -1,3 +1,4 @@
+/// Contains the attribute name and attribute value.
 pub type Attribute = (String, String);
 
 #[derive(PartialEq, Debug)]
