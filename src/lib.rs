@@ -1,187 +1,289 @@
-//! # XML Interpreter
-//!
-//! This crate parses basic XML syntax.
-//! XML syntax supported: element name, closing tags, nesting, attributes
-//! (without the "").
-//!
-//! ## Example Usage
-//!
-//! ```xml
-//! <form>
-//!     <input width=10 height=5 />
-//! </form>
-//! ```
-//!
-//! ## Credits
-//!
-//! This project was inspired by https://bodil.lol/parser-combinators/.
-//! However, I found the implementation convoluted so I tried writing my own
-//! version.
+use std::collections::{VecDeque, HashSet};
+use std::fmt;
 
 
-mod types;
-pub use crate::types::*;
+
+type Id = usize;
 
 
-/// Parses a string (with no `\n`) and returns the filled-in parent element 
-/// (i.e. the root).
-///
-/// # Throws
-/// String of the parsing error.
-pub fn parse<'a>(input: &str, mut parent: Element) -> Result<(Element, String), String> {
-    if input.is_empty() {
-        return Ok((parent, String::new()));
-    }
-
-    if !input.starts_with("<") && !input.starts_with("</") {
-        return Err("Error while parsing: ".to_string() + input);
-    }
-
-    let name = extract_name(&input[1..]).unwrap();
-
-    if let Some(prev_child) = parent.children.last() {
-        // INFO: Handles the case of </parent>.
-        if name.0 == prev_child.name {
-            if !name.1.starts_with(">") {
-                return Err("Closing tag incorrect: ".to_string() + &name.1);
-            }
-            return Ok((parent, name.1[1..].to_string()));
-        }
-    }
-
-    if name.1.starts_with("/>") {
-        // INFO: Handles the case of <img/>
-        parent.children.push(
-            Element {
-                name: name.0,
-                attributes: Vec::new(),
-                children: Vec::new()
-            }
-            );
-
-        return Ok((parent, name.1[2..].to_string()));
-    }
-
-    if name.1.starts_with(">") {
-        // INFO: Removes closing tag from previos parse.
-        parent.children.push(
-            Element {
-                name: name.0,
-                attributes: Vec::new(),
-                children: Vec::new()
-            }
-            );
-
-        return parse(&name.1[1..], parent);
-    }
-
-    let attributes = extract_attributes(&name.1[1..]).unwrap();
-
-    let mut element = Element::new();
-    element.name = name.0;
-    element.attributes = attributes.0;
-
-    let (element, rest_of_input) = parse(&attributes.1, element).unwrap();
-    parent.children.push(element);
-
-    return parse(&rest_of_input, parent);
+struct Attribute {
+    key: String,
+    value: Option<String>,
 }
 
-/// Returns the a tuple of the name of an element and the rest of the string.
-///
-/// # Throws
-/// String of the parsing error.
-fn extract_name(input: &str) -> Result<Box<(String, String)>, String> {
-    let mut result = String::new();
-    let mut it = input.char_indices();
-
-    // INFO: Checks for case </element>.
-    if let Some((_, ch)) = it.next() {
-        if ch != '/' && ch.is_alphabetic() {
-            result.push(ch);
-        } else if ch != '/' && !ch.is_alphabetic() {
-            return Err("Invalid character when extracting name: ".to_string() + &ch.to_string())
-        }
-    }
-
-    while let Some((i, ch)) = it.next() {
-        if ch.is_alphabetic() {
-            result.push(ch);
-        } else if ch == ' ' || ch == '>' || ch == '/' {
-            return Ok(Box::from((result, input[i..].to_string())))
-        } else {
-            return Err("Invalid character when extracting name: ".to_string() + &ch.to_string());
-        }
-    };
-
-    return Ok(Box::from((result, String::new())));
-
+enum AttributeEnding<'a> {
+    Unfinished(&'a str),
+    SelfClosing(&'a str),
+    RequiresClosing(&'a str),
 }
 
-/// Returns the a tuple of all the attributes and the rest of the string.
-///
-/// # Throws
-/// String of the parsing error.
-fn extract_attributes(input :&str) -> Result<Box<(Vec<Attribute>, String)>, String> {
-    let mut attribute = (String::new(), String::new());
-    let mut attributes = Vec::new();
-    let mut it = input.char_indices();
+impl<'a> Attribute {
+    fn parse(elements_table :&mut Vec<Element>, element_id :Id, input :&'a str) -> Result<AttributeEnding<'a>, String> {
+	let mut attribute = Attribute {
+	    key: String::new(),
+	    value: None
+	};
 
-    if let Some((i, ch)) = it.next() {
-        // INFO: Handles cases when attribute list is over and we should parse
-        // the next element, otherwise adds character to the attribute list.
-        if ch == '<' {
-            return Ok(Box::from((vec!(), String::from(&input[i..]))));
-        }
+	let element :&mut Element = &mut elements_table[element_id];
 
-        if ch == '/' || ch == ' ' || ch == '>' {
-            return Ok(Box::from((vec!(), String::from(&input[(i+1)..]))));
-        }
+	let mut trimmed_input = input.trim_start();
 
-        if ch.is_alphabetic() {
-            attribute.0.push(ch);
-        } else {
-            return Err("Error parsing attribute: ".to_string() + input)
-        }
+	let mut it_input = trimmed_input.char_indices();
 
-    } else {
-        return Ok(Box::from((vec!(), String::from(input))));
+	let mut next_idx :usize = 0;
+
+	while let Some((i, ch)) = it_input.next() {
+	    next_idx = i;
+	    
+	    if ch.is_alphabetic() {
+		attribute.key.push(ch);
+	    } else if ch == ' ' {
+		element.attributes.push(attribute);
+		return Ok(AttributeEnding::Unfinished(&trimmed_input[i..]));
+	    } else if ch == '=' {
+		break;
+	    } else if ch == '/' {
+		if let Some((i, ch)) = it_input.next() {
+		    if ch == '>' {
+			element.attributes.push(attribute);
+			return Ok(AttributeEnding::SelfClosing(&trimmed_input[i..]));
+		    } else {
+			return Err(String::from("Missing > in self-closing tag"));
+		    }
+		} else {
+		    return Err(String::from("Could not parse /"));
+		}
+	    } else if ch == '>' {
+		element.attributes.push(attribute);
+		return Ok(AttributeEnding::RequiresClosing(&trimmed_input[i+1..]));
+	    } else {
+		return Err(String::from("Error parsing symbol: ") + &ch.to_string());
+	    }
+	}
+
+	let mut value = String::new();
+
+	while let Some((i, ch)) = it_input.next() {
+	    next_idx = i;
+	    if ch.is_alphanumeric() {
+		value.push(ch);
+	    } else if ch == ' ' {
+		element.attributes.push(attribute);
+		return Ok(AttributeEnding::Unfinished(&trimmed_input[i..]));
+	    } else if ch == '/' {
+		if let Some((i, ch)) = it_input.next() {
+		    if ch == '>' {
+			element.attributes.push(attribute);
+			return Ok(AttributeEnding::SelfClosing(&trimmed_input[i..]));
+		    } else {
+			return Err(String::from("Missing > in self-closing tag"));
+		    }
+		} else {
+		    return Err(String::from("Could not parse /"));
+		}
+	    } else if ch == '>' {
+		element.attributes.push(attribute);
+		return Ok(AttributeEnding::RequiresClosing(&trimmed_input[i+1..]));
+	    } else {
+		return Err(String::from("Error parsing symbol: ") + &ch.to_string());
+	    }
+	}
+
+	return Err(String::from("Unreachable state of attribute parsing, from input: ") + &trimmed_input[next_idx..]);
     }
+}
 
-    // INFO: Extracts attribute name.
-    while let Some((_, ch)) = it.next() {
-        if ch.is_alphabetic() {
-            attribute.0.push(ch);
-        } else if ch == '=' {
-            break;
-        } else {
-            return Err("Error parsing attribute: ".to_string() + input)
-        }
+struct Element {
+    id :usize,
+    name: String,
+    attributes: Vec<Attribute>,
+    parent_id: Option<Id>,
+    children: VecDeque<Id>,
+    children_stack :Vec<Id>,
+    delimiters: HashSet<char>
+}
+
+
+
+impl<'a> Element {
+    fn new(elements_table :&mut Vec<Element>, parent_id :Option<Id>, input :&'a str) -> Result<(Option<Element>, &'a str), String> {
+
+	let mut element = Element {
+	    id: elements_table.len(),
+	    name: String::new(),
+	    attributes: Vec::new(),
+	    parent_id,
+	    children: VecDeque::new(),
+	    children_stack: Vec::new(),
+	    delimiters: vec![' '].into_iter().collect()
+	};
+
+	let mut trimmed_input = input.trim_start();
+
+	let mut it_input = trimmed_input.char_indices();
+
+	let mut is_closing = false;
+
+	if let Some((_, ch)) = it_input.next() {
+	    if ch != '<' {
+		return Err(String::from("Expected <, found: ") + &ch.to_string());
+	    }
+	} else {
+	    return Err(String::from("Expected <, found nothing"));
+	}
+
+	if let Some((_, ch)) = it_input.next() {
+	    if ch == '/' {
+		is_closing = true;
+	    } else {
+		element.name.push(ch);
+	    }
+	} else {
+	    return Err(String::from("Expected element name, found nothing"));
+	}
+
+	let mut next_idx :usize = 0;
+
+	let mut covered_all_input = true;
+
+	while let Some((i, ch)) = it_input.next() {
+	    next_idx = i;
+	    if ch.is_alphabetic() {
+		element.name.push(ch);
+	    } else if element.delimiters.contains(&ch) {
+		covered_all_input = false;
+		break;
+	    } else {
+		return Err(String::from("Wrong symbol: ") + &ch.to_string());
+	    }
+	}
+
+	trimmed_input = if covered_all_input {
+	    ""
+	} else {
+	    &trimmed_input[next_idx..]
+	};
+
+	if let Some(parent_id) = element.parent_id {
+	    let parent = &mut elements_table[parent_id];
+	    
+	    if is_closing {			
+		if let Some(prev_element_id) =
+		    parent.children_stack.pop()
+		{
+		    let prev_element = &elements_table[prev_element_id];
+		    
+		    if prev_element.name != element.name {
+			return Err(
+			    String::from("Expected: ")
+				+ &prev_element.name
+				+ &String::from(" , found: ")
+				+ &element.name
+			);
+		    } else {
+			return Ok(( Some(element), trimmed_input ));
+		    }
+		}
+
+		return Err(String::from("Could not match closing tag: ") + &element.name);
+	    }
+
+
+	    parent.children_stack.push(element.id);
+	    return Element::new(elements_table, Some(element.id), trimmed_input);
+	}
+
+	element.id = 0;
+
+	if is_closing {
+	    return Err(String::from("Could not match closing tag: ") + &element.name);
+	}
+
+	element.children_stack.push(element.id);
+	elements_table.push(element);
+
+	loop {
+	    match Element::new(elements_table, Some(0), trimmed_input) {
+		Ok((opt, input)) => {
+		    let element_ptr = &mut elements_table[0];
+
+		    if let Some(res_element) = opt {
+			if res_element.name != element_ptr.name {
+			    element_ptr.children.push_back(res_element.id);
+			    elements_table.push(res_element);
+			} else {
+			    return Ok((None, input));
+			}
+		    }
+		    
+		    trimmed_input = input;
+		},
+		Err(e) => return Err(e)
+	    };
+	}
+
     }
+}
 
-    // INFO: Extracts attribute value.
-    while let Some((_, ch)) = it.next() {
-        if ch.is_alphanumeric() {
-            attribute.1.push(ch);
-        } else if ch == ' ' || ch == '/' || ch == '>' {
-            break;
-        } else {
-            return Err("Attribute value set incorrectly: ".to_string() + input);
-        }
+
+
+struct ElementTree {
+    root_id: Id,
+    elements_table: Vec<Element>
+}
+
+
+impl fmt::Display for ElementTree {
+    fn fmt(&self, f :&mut fmt::Formatter<'_>) -> fmt::Result {
+	let mut cursor = &self.elements_table[self.root_id];
+	let mut element_stack :VecDeque<Id> = VecDeque::new();
+
+	cursor
+	    .children
+	    .iter()
+	    .for_each(|element| {
+		element_stack.push_back(*element);
+	    });
+
+	while let Some(element) = element_stack.pop_front() {
+	    cursor = &self.elements_table[element];
+	    cursor
+		.children
+		.iter()
+		.for_each(|child| {
+		    element_stack.push_back(*child);
+		});
+	    
+	    if let Err(e) = write!(f, "-> {}\n", cursor.name) {
+		return Err(e);
+	    }
+	};
+
+	return Ok(());
     }
+}
 
-    attributes.push((attribute.0, attribute.1));
 
-    if let Some((i, _)) = it.next() {
-        let rest_of_attributes = *extract_attributes(&input[i..]).unwrap();
-        rest_of_attributes.0.into_iter().for_each(|attr| {
-            attributes.push(attr);
-        });
+impl ElementTree {
+    fn new(input :&str) -> Result<ElementTree, String> {
+	let mut element_tree = ElementTree {
+	    root_id: 0,
+	    elements_table: Vec::new()
+	};
+	    
+	match Element::new(&mut element_tree.elements_table, None, input) {
+	    Ok((_, input)) => {
+		if input != "" {
+		    return Err(String::from("Could not parse rest of input: ") + input);
+		}
 
-        return Ok(Box::new((attributes, rest_of_attributes.1)));
+		return Ok(element_tree);
+	    },
 
-    } else {
-        return Ok(Box::new((attributes, String::new())));
+	    Err(e) => {
+		return Err(e);
+	    }
+	};
     }
 }
 
