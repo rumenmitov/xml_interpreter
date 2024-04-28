@@ -5,7 +5,7 @@ use std::fmt;
 
 type Id = usize;
 
-
+#[derive(Debug)]
 struct Attribute {
     key: String,
     value: Option<String>,
@@ -15,38 +15,33 @@ enum AttributeEnding<'a> {
     Unfinished(&'a str),
     SelfClosing(&'a str),
     RequiresClosing(&'a str),
+    None,
 }
 
 impl<'a> Attribute {
-    fn parse(elements_table :&mut Vec<Element>, element_id :Id, input :&'a str) -> Result<AttributeEnding<'a>, String> {
+    fn parse(element :&mut Element, input :&'a str) -> Result<AttributeEnding<'a>, String> {
 	let mut attribute = Attribute {
 	    key: String::new(),
 	    value: None
 	};
 
-	let element :&mut Element = &mut elements_table[element_id];
-
-	let mut trimmed_input = input.trim_start();
+	let trimmed_input = input.trim_start();
 
 	let mut it_input = trimmed_input.char_indices();
 
-	let mut next_idx :usize = 0;
-
 	while let Some((i, ch)) = it_input.next() {
-	    next_idx = i;
-	    
 	    if ch.is_alphabetic() {
 		attribute.key.push(ch);
 	    } else if ch == ' ' {
 		element.attributes.push(attribute);
-		return Ok(AttributeEnding::Unfinished(&trimmed_input[i..]));
+		return Ok(AttributeEnding::Unfinished(&trimmed_input[i+1..]));
 	    } else if ch == '=' {
 		break;
 	    } else if ch == '/' {
 		if let Some((i, ch)) = it_input.next() {
 		    if ch == '>' {
 			element.attributes.push(attribute);
-			return Ok(AttributeEnding::SelfClosing(&trimmed_input[i..]));
+			return Ok(AttributeEnding::SelfClosing(&trimmed_input[i+1..]));
 		    } else {
 			return Err(String::from("Missing > in self-closing tag"));
 		    }
@@ -64,17 +59,16 @@ impl<'a> Attribute {
 	let mut value = String::new();
 
 	while let Some((i, ch)) = it_input.next() {
-	    next_idx = i;
 	    if ch.is_alphanumeric() {
 		value.push(ch);
 	    } else if ch == ' ' {
 		element.attributes.push(attribute);
-		return Ok(AttributeEnding::Unfinished(&trimmed_input[i..]));
+		return Ok(AttributeEnding::Unfinished(&trimmed_input[i+1..]));
 	    } else if ch == '/' {
 		if let Some((i, ch)) = it_input.next() {
 		    if ch == '>' {
 			element.attributes.push(attribute);
-			return Ok(AttributeEnding::SelfClosing(&trimmed_input[i..]));
+			return Ok(AttributeEnding::SelfClosing(&trimmed_input[i+1..]));
 		    } else {
 			return Err(String::from("Missing > in self-closing tag"));
 		    }
@@ -89,10 +83,11 @@ impl<'a> Attribute {
 	    }
 	}
 
-	return Err(String::from("Unreachable state of attribute parsing, from input: ") + &trimmed_input[next_idx..]);
+	return Ok(AttributeEnding::None);
     }
 }
 
+#[derive(Debug)]
 struct Element {
     id :usize,
     name: String,
@@ -115,7 +110,7 @@ impl<'a> Element {
 	    parent_id,
 	    children: VecDeque::new(),
 	    children_stack: Vec::new(),
-	    delimiters: vec![' '].into_iter().collect()
+	    delimiters: vec![' ', '>'].into_iter().collect()
 	};
 
 	let mut trimmed_input = input.trim_start();
@@ -126,6 +121,7 @@ impl<'a> Element {
 
 	if let Some((_, ch)) = it_input.next() {
 	    if ch != '<' {
+		eprintln!("INPUT={}", trimmed_input);
 		return Err(String::from("Expected <, found: ") + &ch.to_string());
 	    }
 	} else {
@@ -164,10 +160,48 @@ impl<'a> Element {
 	    &trimmed_input[next_idx..]
 	};
 
+	let mut is_closed :bool;
+
+	loop {
+	    match Attribute::parse(&mut element, trimmed_input) {
+		Ok(opt) => {
+		    match opt {
+			AttributeEnding::Unfinished(rest_of_input) => {
+			    trimmed_input = rest_of_input;
+			    continue;
+			},
+
+			AttributeEnding::SelfClosing(rest_of_input) => {
+			    trimmed_input = rest_of_input;
+			    is_closed = true;
+			    break;
+			},
+
+			AttributeEnding::RequiresClosing(rest_of_input) => {
+			    trimmed_input = rest_of_input;
+			    is_closed = false;
+			    break;
+			},
+
+			AttributeEnding::None => {
+			    trimmed_input = "";
+			    is_closed = true;
+			    break;
+			}
+		    }
+		},
+		Err(e) => return Err(e),
+	    };
+	}
+
 	if let Some(parent_id) = element.parent_id {
 	    let parent = &mut elements_table[parent_id];
+
+	    if is_closed {
+		return Ok(( Some(element), trimmed_input));
+	    }
 	    
-	    if is_closing {			
+	    if is_closing {
 		if let Some(prev_element_id) =
 		    parent.children_stack.pop()
 		{
@@ -177,7 +211,7 @@ impl<'a> Element {
 			return Err(
 			    String::from("Expected: ")
 				+ &prev_element.name
-				+ &String::from(" , found: ")
+				+ &String::from(", found: ")
 				+ &element.name
 			);
 		    } else {
@@ -189,11 +223,20 @@ impl<'a> Element {
 	    }
 
 
-	    parent.children_stack.push(element.id);
-	    return Element::new(elements_table, Some(element.id), trimmed_input);
+	    let id :Id = element.id;
+
+	    parent.children_stack.push(id);
+	    element.children_stack.push(id);
+	    elements_table.push(element);
+	    return Element::new(elements_table, Some(id), trimmed_input);
 	}
 
 	element.id = 0;
+
+	if is_closed {
+	    elements_table.push(element);
+	    return Ok(( None, trimmed_input));
+	}
 
 	if is_closing {
 	    return Err(String::from("Could not match closing tag: ") + &element.name);
