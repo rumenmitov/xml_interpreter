@@ -5,12 +5,13 @@ use std::fmt;
 
 type Id = usize;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct Attribute {
     key: String,
     value: Option<String>,
 }
 
+#[derive(Debug, PartialEq)]
 enum AttributeEnding<'a> {
     Unfinished(&'a str),
     SelfClosing(&'a str),
@@ -87,7 +88,7 @@ impl<'a> Attribute {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct Element {
     id :usize,
     name: String,
@@ -95,13 +96,14 @@ struct Element {
     parent_id: Option<Id>,
     children: VecDeque<Id>,
     children_stack :Vec<Id>,
-    delimiters: HashSet<char>
 }
 
 
 
 impl<'a> Element {
     fn new(elements_table :&mut Vec<Element>, parent_id :Option<Id>, input :&'a str) -> Result<(Option<Element>, &'a str), String> {
+
+	let delimiters :HashSet<char> = [' ', '>'].into();
 
 	let mut element = Element {
 	    id: elements_table.len(),
@@ -110,7 +112,6 @@ impl<'a> Element {
 	    parent_id,
 	    children: VecDeque::new(),
 	    children_stack: Vec::new(),
-	    delimiters: vec![' ', '>'].into_iter().collect()
 	};
 
 	let mut trimmed_input = input.trim_start();
@@ -121,7 +122,6 @@ impl<'a> Element {
 
 	if let Some((_, ch)) = it_input.next() {
 	    if ch != '<' {
-		eprintln!("INPUT={}", trimmed_input);
 		return Err(String::from("Expected <, found: ") + &ch.to_string());
 	    }
 	} else {
@@ -146,7 +146,7 @@ impl<'a> Element {
 	    next_idx = i;
 	    if ch.is_alphabetic() {
 		element.name.push(ch);
-	    } else if element.delimiters.contains(&ch) {
+	    } else if delimiters.contains(&ch) {
 		covered_all_input = false;
 		break;
 	    } else {
@@ -160,7 +160,7 @@ impl<'a> Element {
 	    &trimmed_input[next_idx..]
 	};
 
-	let mut is_closed :bool;
+	let is_closed :bool;
 
 	loop {
 	    match Attribute::parse(&mut element, trimmed_input) {
@@ -270,6 +270,7 @@ impl<'a> Element {
 
 
 
+#[derive(Debug, PartialEq)]
 struct ElementTree {
     root_id: Id,
     elements_table: Vec<Element>
