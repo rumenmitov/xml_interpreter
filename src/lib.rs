@@ -3,24 +3,110 @@ use std::fmt;
 
 
 
+type Id = usize;
 
 
+struct Attribute {
+    key: String,
+    value: Option<String>,
+}
 
-type Attribute = (String, String);
+enum AttributeEnding<'a> {
+    Unfinished(&'a str),
+    SelfClosing(&'a str),
+    RequiresClosing(&'a str),
+}
+
+impl<'a> Attribute {
+    fn parse(elements_table :&mut Vec<Element>, element_id :Id, input :&'a str) -> Result<AttributeEnding<'a>, String> {
+	let mut attribute = Attribute {
+	    key: String::new(),
+	    value: None
+	};
+
+	let element :&mut Element = &mut elements_table[element_id];
+
+	let mut trimmed_input = input.trim_start();
+
+	let mut it_input = trimmed_input.char_indices();
+
+	let mut next_idx :usize = 0;
+
+	while let Some((i, ch)) = it_input.next() {
+	    next_idx = i;
+	    
+	    if ch.is_alphabetic() {
+		attribute.key.push(ch);
+	    } else if ch == ' ' {
+		element.attributes.push(attribute);
+		return Ok(AttributeEnding::Unfinished(&trimmed_input[i..]));
+	    } else if ch == '=' {
+		break;
+	    } else if ch == '/' {
+		if let Some((i, ch)) = it_input.next() {
+		    if ch == '>' {
+			element.attributes.push(attribute);
+			return Ok(AttributeEnding::SelfClosing(&trimmed_input[i..]));
+		    } else {
+			return Err(String::from("Missing > in self-closing tag"));
+		    }
+		} else {
+		    return Err(String::from("Could not parse /"));
+		}
+	    } else if ch == '>' {
+		element.attributes.push(attribute);
+		return Ok(AttributeEnding::RequiresClosing(&trimmed_input[i+1..]));
+	    } else {
+		return Err(String::from("Error parsing symbol: ") + &ch.to_string());
+	    }
+	}
+
+	let mut value = String::new();
+
+	while let Some((i, ch)) = it_input.next() {
+	    next_idx = i;
+	    if ch.is_alphanumeric() {
+		value.push(ch);
+	    } else if ch == ' ' {
+		element.attributes.push(attribute);
+		return Ok(AttributeEnding::Unfinished(&trimmed_input[i..]));
+	    } else if ch == '/' {
+		if let Some((i, ch)) = it_input.next() {
+		    if ch == '>' {
+			element.attributes.push(attribute);
+			return Ok(AttributeEnding::SelfClosing(&trimmed_input[i..]));
+		    } else {
+			return Err(String::from("Missing > in self-closing tag"));
+		    }
+		} else {
+		    return Err(String::from("Could not parse /"));
+		}
+	    } else if ch == '>' {
+		element.attributes.push(attribute);
+		return Ok(AttributeEnding::RequiresClosing(&trimmed_input[i+1..]));
+	    } else {
+		return Err(String::from("Error parsing symbol: ") + &ch.to_string());
+	    }
+	}
+
+	return Err(String::from("Unreachable state of attribute parsing, from input: ") + &trimmed_input[next_idx..]);
+    }
+}
 
 struct Element {
     id :usize,
     name: String,
     attributes: Vec<Attribute>,
-    parent_id: Option<usize>,
-    children: VecDeque<usize>,
-    children_stack :Vec<usize>,
+    parent_id: Option<Id>,
+    children: VecDeque<Id>,
+    children_stack :Vec<Id>,
+    delimiters: HashSet<char>
 }
 
 
 
 impl<'a> Element {
-    fn new(elements_table :&mut Vec<Element>, parent_id :Option<usize>, input :&'a str, delimiters :&HashSet<char>) -> Result<(Option<Element>, &'a str), String> {
+    fn new(elements_table :&mut Vec<Element>, parent_id :Option<Id>, input :&'a str) -> Result<(Option<Element>, &'a str), String> {
 
 	let mut element = Element {
 	    id: elements_table.len(),
@@ -28,7 +114,8 @@ impl<'a> Element {
 	    attributes: Vec::new(),
 	    parent_id,
 	    children: VecDeque::new(),
-	    children_stack: Vec::new()
+	    children_stack: Vec::new(),
+	    delimiters: vec![' '].into_iter().collect()
 	};
 
 	let mut trimmed_input = input.trim_start();
@@ -63,7 +150,7 @@ impl<'a> Element {
 	    next_idx = i;
 	    if ch.is_alphabetic() {
 		element.name.push(ch);
-	    } else if delimiters.contains(&ch) {
+	    } else if element.delimiters.contains(&ch) {
 		covered_all_input = false;
 		break;
 	    } else {
@@ -103,7 +190,7 @@ impl<'a> Element {
 
 
 	    parent.children_stack.push(element.id);
-	    return Element::new(elements_table, Some(element.id), trimmed_input, delimiters);
+	    return Element::new(elements_table, Some(element.id), trimmed_input);
 	}
 
 	element.id = 0;
@@ -116,7 +203,7 @@ impl<'a> Element {
 	elements_table.push(element);
 
 	loop {
-	    match Element::new(elements_table, Some(0), trimmed_input, delimiters) {
+	    match Element::new(elements_table, Some(0), trimmed_input) {
 		Ok((opt, input)) => {
 		    let element_ptr = &mut elements_table[0];
 
@@ -141,7 +228,7 @@ impl<'a> Element {
 
 
 struct ElementTree {
-    root_id: usize,
+    root_id: Id,
     elements_table: Vec<Element>
 }
 
@@ -149,9 +236,8 @@ struct ElementTree {
 impl fmt::Display for ElementTree {
     fn fmt(&self, f :&mut fmt::Formatter<'_>) -> fmt::Result {
 	let mut cursor = &self.elements_table[self.root_id];
-	let mut element_stack :VecDeque<usize> = VecDeque::new();
+	let mut element_stack :VecDeque<Id> = VecDeque::new();
 
-	
 	cursor
 	    .children
 	    .iter()
@@ -185,9 +271,7 @@ impl ElementTree {
 	    elements_table: Vec::new()
 	};
 	    
-	let element_name_delimiters :HashSet<char> = vec![' '].into_iter().collect();
-
-	match Element::new(&mut element_tree.elements_table, None, input, &element_name_delimiters) {
+	match Element::new(&mut element_tree.elements_table, None, input) {
 	    Ok((_, input)) => {
 		if input != "" {
 		    return Err(String::from("Could not parse rest of input: ") + input);
