@@ -1,7 +1,4 @@
 use std::collections::{VecDeque, HashSet};
-use std::fmt;
-
-
 
 type Id = usize;
 
@@ -95,6 +92,7 @@ struct Element {
     name: String,
     attributes: Vec<Attribute>,
     parent_id: Option<Id>,
+    depth: usize,
     children: Vec<Id>,
 }
 
@@ -115,6 +113,7 @@ impl<'a> Element {
 	    name: String::new(),
 	    attributes: Vec::new(),
 	    parent_id: None,
+	    depth: 0,
 	    children: Vec::new()
 	}
     }
@@ -221,33 +220,41 @@ pub struct ElementTree {
 }
 
 
-impl fmt::Display for ElementTree {
-    fn fmt(&self, f :&mut fmt::Formatter<'_>) -> fmt::Result {
-	let mut cursor = &self.elements[self.root_id];
-	let mut element_stack :VecDeque<Id> = VecDeque::new();
+impl ToString for ElementTree {
+    fn to_string(&self) -> String {
+	let mut cursor :&Element;
+	
+	match self.elements.iter().nth(self.root_id) {
+	    Some(element) => cursor = element,
+	    None => return String::new(),
+	};
 
-	cursor
-	    .children
-	    .iter()
-	    .for_each(|element| {
-		element_stack.push_back(*element);
-	    });
+	let mut element_stack :VecDeque<&Id> = VecDeque::from([&cursor.id]);
+
+	let mut result = String::new();
 
 	while let Some(element) = element_stack.pop_front() {
-	    cursor = &self.elements[element];
+	    let mut depth_arrow = String::from("> ");
+
+	    cursor = &self.elements.iter().nth(*element).unwrap();
+
 	    cursor
 		.children
 		.iter()
 		.for_each(|child| {
-		    element_stack.push_back(*child);
+		    element_stack.push_back(child);
 		});
-	    
-	    if let Err(e) = write!(f, "-> {}\n", cursor.name) {
-		return Err(e);
+
+	    for _ in 0..cursor.depth {
+		depth_arrow = "-".to_string() + &depth_arrow;
 	    }
+
+	    result.push_str(&depth_arrow);
+	    result.push_str(&cursor.name);
+	    result.push('\n');
 	};
 
-	return Ok(());
+	return result;
     }
 }
 
@@ -262,6 +269,7 @@ impl ElementTree {
 	let mut unclosed_elements_stack :Vec<Id> = Vec::new();
 	let mut parent_id :Option<Id> = None;
 	let mut current_id :Id = 0;
+	let mut depth :usize = 0;
 
 	let mut input = original_input;
 
@@ -272,8 +280,11 @@ impl ElementTree {
 			ElementState::Opening((mut element, rest_of_input)) => {
 			    element.parent_id = parent_id;
 			    
+			    depth += 1;
+			    element.depth = depth;
+			    
 			    element_tree.elements.push(element);
-			    input = rest_of_input;
+			    input = rest_of_input.trim_start();
 
 			    if let Some(id) = parent_id {
 				unclosed_elements_stack.push(id);
@@ -288,9 +299,11 @@ impl ElementTree {
 			
 			ElementState::SelfClosing((mut element, rest_of_input)) => {
 			    element.parent_id = parent_id;
+
+			    element.depth = depth + 1;
 			    
 			    element_tree.elements.push(element);
-			    input = rest_of_input;
+			    input = rest_of_input.trim_start();
 
 			    if let Some(id) = parent_id {
 				unclosed_elements_stack.push(id);
@@ -319,8 +332,9 @@ impl ElementTree {
 						+ &element.name
 					);
 				    } else {
-					input = rest_of_input;
+					input = rest_of_input.trim_start();
 					parent_id = prev_element.parent_id;
+					depth -= 1;
 					continue;
 				    }
 				}

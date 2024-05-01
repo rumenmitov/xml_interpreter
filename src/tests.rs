@@ -22,6 +22,7 @@ fn test_element_parsing() {
 	name: String::from("root"),
 	attributes: Vec::new(),
 	parent_id: None,
+	depth: 0,
 	children: Vec::new()
     };
 
@@ -42,6 +43,7 @@ fn test_element_tree() {
 		name: String::from("root"),
 		attributes: Vec::new(),
 		parent_id: None,
+		depth: 1,
 		children: Vec::from([1]),
 	    },
 
@@ -55,6 +57,7 @@ fn test_element_tree() {
 		    }
 		],
 		parent_id: Some(0),
+		depth: 2,
 		children: Vec::from([2]),
 	    },
 
@@ -63,6 +66,7 @@ fn test_element_tree() {
 		name: String::from("img"),
 		attributes: Vec::new(),
 		parent_id: Some(1),
+		depth: 3,
 		children: Vec::new(),
 	    }
 	]

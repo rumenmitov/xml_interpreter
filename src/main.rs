@@ -3,17 +3,22 @@ use xml_interpreter::ElementTree;
 
 
 fn main() {
-    for filename in env::args() {
-	if filename == "-h" || filename == "--help" {
-	    todo!();
-	    continue;
+    let mut args :Vec<String> = env::args().collect();
+    let mut iter_args = args.iter_mut();
+    
+    iter_args.next();
+    
+    while let Some(arg) = iter_args.next() {
+	if arg == "-h" || arg == "--help" {
+	    println!("Help menu!");
+	    break;
 	}
 	
-	match fs::read_to_string(&filename) {
+	match fs::read_to_string(&arg) {
 	    Ok(contents) => {
 		match ElementTree::parse(&contents) {
 		    Ok(result) => {
-			println!("--- Contents of {}: ---\n{}\n\n", filename, result);
+			println!("--- Contents of {} ---\n\n{}", arg, result.to_string());
 		    },
 
 		    Err(e) => panic!("Error: {}", e)
