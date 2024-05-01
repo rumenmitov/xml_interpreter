@@ -68,5 +68,5 @@ fn test_element_tree() {
 	]
     };
 
-    assert_eq!(Ok(solution), ElementTree::new("<root><text width=5><img /></text></root>"));
+    assert_eq!(Ok(solution), ElementTree::parse("<root><text width=5><img /></text></root>"));
 }

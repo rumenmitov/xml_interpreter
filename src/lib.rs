@@ -215,7 +215,7 @@ impl<'a> Element {
 
 
 #[derive(Debug, PartialEq)]
-struct ElementTree {
+pub struct ElementTree {
     root_id: Id,
     elements: Vec<Element>
 }
@@ -253,7 +253,7 @@ impl fmt::Display for ElementTree {
 
 
 impl ElementTree {
-    fn new(original_input :&str) -> Result<ElementTree, String> {
+    pub fn parse(original_input :&str) -> Result<ElementTree, String> {
 	let mut element_tree = ElementTree {
 	    root_id: 0,
 	    elements: Vec::new(),
