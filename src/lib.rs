@@ -89,7 +89,7 @@ impl<'a> Attribute {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct Element {
     id :usize,
     name: String,

@@ -3,15 +3,32 @@ use super::*;
 
 #[test]
 fn test_attribute_parsing() {
-    let attribute_solution = Attribute {
+    let attribute = Attribute {
 	key: String::from("name"),
 	value: Some(String::from("jester")),
     };
 
-    assert_eq!(Ok(AttributeEnding::Unfinished((attribute_solution.clone(), ""))), Attribute::parse("name=jester "));
-    assert_eq!(Ok(AttributeEnding::SelfClosing((attribute_solution.clone(), ""))), Attribute::parse("name=jester/>"));
-    assert_eq!(Ok(AttributeEnding::RequiresClosing((attribute_solution, ""))), Attribute::parse("name=jester>"));
+    assert_eq!(Ok(AttributeEnding::Unfinished((attribute.clone(), ""))), Attribute::parse("name=jester "));
+    assert_eq!(Ok(AttributeEnding::SelfClosing((attribute.clone(), ""))), Attribute::parse("name=jester/>"));
+    assert_eq!(Ok(AttributeEnding::RequiresClosing((attribute, ""))), Attribute::parse("name=jester>"));
     assert_eq!(Ok(AttributeEnding::None), Attribute::parse(""));
+}
+
+
+#[test]
+fn test_element_parsing() {
+    let element = Element {
+	id: 0,
+	name: String::from("root"),
+	attributes: Vec::new(),
+	parent_id: None,
+	children: Vec::new()
+    };
+
+    assert_eq!(Ok(ElementState::Opening((element.clone(), "</root>"))), Element::parse(0, "<root></root>"));
+    assert_eq!(Ok(ElementState::Closing((element.clone(), ""))), Element::parse(0, "</root>"));
+    assert_eq!(Ok(ElementState::SelfClosing((element, ""))), Element::parse(0, "<root />"));
+    assert_eq!(Ok(ElementState::None), Element::parse(0, "<>"));
 }
 
 
@@ -51,6 +68,5 @@ fn test_element_tree() {
 	]
     };
 
-    let element_tree = ElementTree::new("<root><text width=5><img /></text></root>").unwrap();
-    assert_eq!(solution, element_tree);
+    assert_eq!(Ok(solution), ElementTree::new("<root><text width=5><img /></text></root>"));
 }
