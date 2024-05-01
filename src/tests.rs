@@ -3,40 +3,29 @@ use super::*;
 
 #[test]
 fn test_attribute_parsing() {
-    let mut element = Element {
-	id: 0,
-	name: String::new(),
-	attributes: Vec::new(),
-	parent_id: None,
-	children: VecDeque::new(),
-	children_stack: Vec::new(),
+    let attribute_solution = Attribute {
+	key: String::from("name"),
+	value: Some(String::from("jester")),
     };
 
-    assert_eq!(Ok(AttributeEnding::Unfinished("")), Attribute::parse(&mut element, "name=jester "));
-    assert_eq!(Ok(AttributeEnding::SelfClosing("")), Attribute::parse(&mut element, "name=jester/>"));
-    assert_eq!(Ok(AttributeEnding::RequiresClosing("")), Attribute::parse(&mut element, "name=jester>"));
-    
+    assert_eq!(Ok(AttributeEnding::Unfinished((attribute_solution.clone(), ""))), Attribute::parse("name=jester "));
+    assert_eq!(Ok(AttributeEnding::SelfClosing((attribute_solution.clone(), ""))), Attribute::parse("name=jester/>"));
+    assert_eq!(Ok(AttributeEnding::RequiresClosing((attribute_solution, ""))), Attribute::parse("name=jester>"));
+    assert_eq!(Ok(AttributeEnding::None), Attribute::parse(""));
 }
 
 
 #[test]
 fn test_element_tree() {
-
     let solution = ElementTree {
 	root_id: 0,
-	elements_table: vec![
+	elements: vec![
 	    Element {
 		id: 0,
 		name: String::from("root"),
-		attributes: vec![
-		    Attribute {
-			key: String::new(),
-			value: None,
-		    }
-		],
+		attributes: Vec::new(),
 		parent_id: None,
-		children: VecDeque::from([1]),
-		children_stack: Vec::new(),
+		children: Vec::from([1]),
 	    },
 
 	    Element {
@@ -49,29 +38,19 @@ fn test_element_tree() {
 		    }
 		],
 		parent_id: Some(0),
-		children: VecDeque::from([2]),
-		children_stack: Vec::new(),
+		children: Vec::from([2]),
 	    },
 
 	    Element {
 		id: 2,
 		name: String::from("img"),
-		attributes: vec![
-		    Attribute {
-			key: String::new(),
-			value: None
-		    }
-		],
+		attributes: Vec::new(),
 		parent_id: Some(1),
-		children: VecDeque::new(),
-		children_stack: Vec::new(),
+		children: Vec::new(),
 	    }
 	]
     };
 
-    let et = ElementTree::new("<root><text width=5><img /></text></root>").unwrap();
-    assert_eq!(solution, et);
-    assert_eq!("root", et.elements_table[0].name);
-    assert_eq!("text", et.elements_table[1].name);
-    assert_eq!("img", et.elements_table[2].name);
+    let element_tree = ElementTree::new("<root><text width=5><img /></text></root>").unwrap();
+    assert_eq!(solution, element_tree);
 }
