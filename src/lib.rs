@@ -286,9 +286,9 @@ impl ElementTree {
 			    element_tree.elements.push(element);
 			    input = rest_of_input.trim_start();
 
+			    unclosed_elements_stack.push(current_id);
+			    
 			    if let Some(id) = parent_id {
-				unclosed_elements_stack.push(id);
-
 				if let Some(parent) = element_tree.elements.iter_mut().nth(id) {
 				    parent.children.push(current_id);
 				}
@@ -306,8 +306,6 @@ impl ElementTree {
 			    input = rest_of_input.trim_start();
 
 			    if let Some(id) = parent_id {
-				unclosed_elements_stack.push(id);
-
 				if let Some(parent) = element_tree.elements.iter_mut().nth(id) {
 				    parent.children.push(current_id);
 				}
@@ -319,7 +317,7 @@ impl ElementTree {
 				return Err(String::from("Closing tag missing opening tag! Element: ")
 					   + &element.name);
 			    }
-
+			    
 			    if let Some(prev_element_id) = unclosed_elements_stack.pop() {
 				if let Some(prev_element) =
 				    element_tree.elements.iter().nth(prev_element_id)

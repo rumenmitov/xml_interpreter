@@ -35,7 +35,7 @@ fn test_element_parsing() {
 
 #[test]
 fn test_element_tree() {
-    let solution = ElementTree {
+    let mut solution = ElementTree {
 	root_id: 0,
 	elements: vec![
 	    Element {
@@ -73,4 +73,20 @@ fn test_element_tree() {
     };
 
     assert_eq!(Ok(solution), ElementTree::parse("<root><text width=5><img /></text></root>"));
+
+    solution = ElementTree {
+	root_id: 0,
+	elements: vec![
+	    Element {
+		id: 0,
+		name: String::from("root"),
+		attributes: Vec::new(),
+		parent_id: None,
+		depth: 1,
+		children: Vec::new()
+	    }
+	]
+    };
+
+    assert_eq!(Ok(solution), ElementTree::parse("<root></root>"));
 }
