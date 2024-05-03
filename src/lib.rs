@@ -1,11 +1,8 @@
 use std::collections::{VecDeque, HashSet};
-use std::fmt;
-
-
 
 type Id = usize;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct Attribute {
     key: String,
     value: Option<String>,
@@ -13,14 +10,18 @@ struct Attribute {
 
 #[derive(Debug, PartialEq)]
 enum AttributeEnding<'a> {
-    Unfinished(&'a str),
-    SelfClosing(&'a str),
-    RequiresClosing(&'a str),
+    Unfinished((Attribute, &'a str)),
+    SelfClosing((Attribute, &'a str)),
+    RequiresClosing((Attribute, &'a str)),
     None,
 }
 
-impl<'a> Attribute {
-    fn parse(element :&mut Element, input :&'a str) -> Result<AttributeEnding<'a>, String> {
+impl<'a> Attribute {    
+    fn is_empty(&self) -> bool {
+	self.key.is_empty() && self.value == None
+    }
+    
+    fn parse(input :&'a str) -> Result<AttributeEnding<'a>, String> {
 	let mut attribute = Attribute {
 	    key: String::new(),
 	    value: None
@@ -28,21 +29,19 @@ impl<'a> Attribute {
 
 	let trimmed_input = input.trim_start();
 
-	let mut it_input = trimmed_input.char_indices();
+	let mut iter_input = trimmed_input.char_indices();
 
-	while let Some((i, ch)) = it_input.next() {
+	while let Some((i, ch)) = iter_input.next() {
 	    if ch.is_alphabetic() {
 		attribute.key.push(ch);
 	    } else if ch == ' ' {
-		element.attributes.push(attribute);
-		return Ok(AttributeEnding::Unfinished(&trimmed_input[i+1..]));
+		return Ok(AttributeEnding::Unfinished((attribute, &trimmed_input[i+1..])));
 	    } else if ch == '=' {
 		break;
 	    } else if ch == '/' {
-		if let Some((i, ch)) = it_input.next() {
+		if let Some((i, ch)) = iter_input.next() {
 		    if ch == '>' {
-			element.attributes.push(attribute);
-			return Ok(AttributeEnding::SelfClosing(&trimmed_input[i+1..]));
+			return Ok(AttributeEnding::SelfClosing((attribute, &trimmed_input[i+1..])));
 		    } else {
 			return Err(String::from("Missing > in self-closing tag"));
 		    }
@@ -50,26 +49,25 @@ impl<'a> Attribute {
 		    return Err(String::from("Could not parse /"));
 		}
 	    } else if ch == '>' {
-		element.attributes.push(attribute);
-		return Ok(AttributeEnding::RequiresClosing(&trimmed_input[i+1..]));
+		return Ok(AttributeEnding::RequiresClosing((attribute, &trimmed_input[i+1..])));
 	    } else {
 		return Err(String::from("Error parsing symbol: ") + &ch.to_string());
 	    }
 	}
 
-	let mut value = String::new();
+	attribute.value = Some(String::new());
 
-	while let Some((i, ch)) = it_input.next() {
+	while let Some((i, ch)) = iter_input.next() {
 	    if ch.is_alphanumeric() {
-		value.push(ch);
+		if let Some(val) = attribute.value {
+		    attribute.value = Some(val + &ch.to_string());
+		}
 	    } else if ch == ' ' {
-		element.attributes.push(attribute);
-		return Ok(AttributeEnding::Unfinished(&trimmed_input[i+1..]));
+		return Ok(AttributeEnding::Unfinished((attribute, &trimmed_input[i+1..])));
 	    } else if ch == '/' {
-		if let Some((i, ch)) = it_input.next() {
+		if let Some((i, ch)) = iter_input.next() {
 		    if ch == '>' {
-			element.attributes.push(attribute);
-			return Ok(AttributeEnding::SelfClosing(&trimmed_input[i+1..]));
+			return Ok(AttributeEnding::SelfClosing((attribute, &trimmed_input[i+1..])));
 		    } else {
 			return Err(String::from("Missing > in self-closing tag"));
 		    }
@@ -77,8 +75,7 @@ impl<'a> Attribute {
 		    return Err(String::from("Could not parse /"));
 		}
 	    } else if ch == '>' {
-		element.attributes.push(attribute);
-		return Ok(AttributeEnding::RequiresClosing(&trimmed_input[i+1..]));
+		return Ok(AttributeEnding::RequiresClosing((attribute, &trimmed_input[i+1..])));
 	    } else {
 		return Err(String::from("Error parsing symbol: ") + &ch.to_string());
 	    }
@@ -88,246 +85,274 @@ impl<'a> Attribute {
     }
 }
 
-#[derive(Debug, PartialEq)]
+
+#[derive(Debug, PartialEq, Clone)]
 struct Element {
     id :usize,
     name: String,
     attributes: Vec<Attribute>,
     parent_id: Option<Id>,
-    children: VecDeque<Id>,
-    children_stack :Vec<Id>,
+    depth: usize,
+    children: Vec<Id>,
 }
 
 
+#[derive(Debug, PartialEq)]
+enum ElementState<'a> {
+    Opening((Element, &'a str)),
+    Closing((Element, &'a str)),
+    SelfClosing((Element, &'a str)),
+    None,
+}
+
 
 impl<'a> Element {
-    fn new(elements_table :&mut Vec<Element>, parent_id :Option<Id>, input :&'a str) -> Result<(Option<Element>, &'a str), String> {
-
-	let delimiters :HashSet<char> = [' ', '>'].into();
-
-	let mut element = Element {
-	    id: elements_table.len(),
+    fn new() -> Element {
+	Element {
+	    id: 0,
 	    name: String::new(),
 	    attributes: Vec::new(),
-	    parent_id,
-	    children: VecDeque::new(),
-	    children_stack: Vec::new(),
-	};
-
-	let mut trimmed_input = input.trim_start();
-
-	let mut it_input = trimmed_input.char_indices();
-
-	let mut is_closing = false;
-
-	if let Some((_, ch)) = it_input.next() {
-	    if ch != '<' {
-		return Err(String::from("Expected <, found: ") + &ch.to_string());
-	    }
-	} else {
-	    return Err(String::from("Expected <, found nothing"));
+	    parent_id: None,
+	    depth: 0,
+	    children: Vec::new()
 	}
+    }
+    
+    fn parse(id :Id, original_input :&'a str) -> Result<ElementState<'a>, String> {
+	let mut element = Element::new();
+	element.id = id;
 
-	if let Some((_, ch)) = it_input.next() {
-	    if ch == '/' {
-		is_closing = true;
-	    } else {
-		element.name.push(ch);
-	    }
-	} else {
-	    return Err(String::from("Expected element name, found nothing"));
+	let mut element_state  = ElementState::None;
+	
+	let delimiters :HashSet<char> = [' ', '>'].into();
+
+	let mut input = original_input.trim_start();
+
+	let mut iter_input = input.char_indices();
+
+	if let Some((_, ch)) = iter_input.next() {
+ 	    if ch != '<' {
+ 		return Err(String::from("Expected <, found: ") + &ch.to_string());
+ 	    }
+ 	} else {
+ 	    return Err(String::from("Expected <, found nothing"));
+ 	}
+
+ 	if let Some((_, ch)) = iter_input.next() {
+ 	    if ch == '/' {
+ 		element_state = ElementState::Closing((Element::new(), ""));
+ 	    } else {
+ 		element.name.push(ch);
+ 	    }
+ 	} else {
+ 	    return Err(String::from("Expected element name, found nothing"));
 	}
-
-	let mut next_idx :usize = 0;
 
 	let mut covered_all_input = true;
 
-	while let Some((i, ch)) = it_input.next() {
-	    next_idx = i;
-	    if ch.is_alphabetic() {
-		element.name.push(ch);
-	    } else if delimiters.contains(&ch) {
+	while let Some((i, ch)) = iter_input.next() {
+ 	    if ch.is_alphabetic() {
+ 		element.name.push(ch);
+ 	    } else if delimiters.contains(&ch) {
 		covered_all_input = false;
-		break;
-	    } else {
-		return Err(String::from("Wrong symbol: ") + &ch.to_string());
-	    }
+		input = &input[i..];
+ 		break;
+ 	    } else {
+ 		return Err(String::from("Wrong symbol: ") + &ch.to_string());
+ 	    }
 	}
 
-	trimmed_input = if covered_all_input {
+	input = if covered_all_input {
 	    ""
 	} else {
-	    &trimmed_input[next_idx..]
+	    input
 	};
 
-	let is_closed :bool;
+	if let ElementState::Closing(_) = element_state {
+	    return Ok(ElementState::Closing((element, &input[1..])));
+	}
 
 	loop {
-	    match Attribute::parse(&mut element, trimmed_input) {
+	    match Attribute::parse(input) {
 		Ok(opt) => {
 		    match opt {
-			AttributeEnding::Unfinished(rest_of_input) => {
-			    trimmed_input = rest_of_input;
+			AttributeEnding::Unfinished((attribute, rest_of_input)) => {
+			    if !attribute.is_empty() {
+				element.attributes.push(attribute);
+			    }
+			    
+			    input = rest_of_input;
 			    continue;
 			},
 
-			AttributeEnding::SelfClosing(rest_of_input) => {
-			    trimmed_input = rest_of_input;
-			    is_closed = true;
-			    break;
+			AttributeEnding::SelfClosing((attribute, rest_of_input)) => {
+			    if !attribute.is_empty() {
+				element.attributes.push(attribute);
+			    }
+			    
+			    return Ok(ElementState::SelfClosing((element, rest_of_input)));
 			},
 
-			AttributeEnding::RequiresClosing(rest_of_input) => {
-			    trimmed_input = rest_of_input;
-			    is_closed = false;
-			    break;
+			AttributeEnding::RequiresClosing((attribute, rest_of_input)) => {
+			    if !attribute.is_empty() {
+				element.attributes.push(attribute);
+			    }
+			    
+			    return Ok(ElementState::Opening((element, rest_of_input)));
 			},
 
 			AttributeEnding::None => {
-			    trimmed_input = "";
-			    is_closed = true;
-			    break;
+			    return Ok(ElementState::None);
 			}
 		    }
 		},
 		Err(e) => return Err(e),
 	    };
-	}
-
-	if let Some(parent_id) = element.parent_id {
-	    let parent = &mut elements_table[parent_id];
-
-	    if is_closed {
-		return Ok(( Some(element), trimmed_input));
-	    }
-	    
-	    if is_closing {
-		if let Some(prev_element_id) =
-		    parent.children_stack.pop()
-		{
-		    let prev_element = &elements_table[prev_element_id];
-		    
-		    if prev_element.name != element.name {
-			return Err(
-			    String::from("Expected: ")
-				+ &prev_element.name
-				+ &String::from(", found: ")
-				+ &element.name
-			);
-		    } else {
-			return Ok(( Some(element), trimmed_input ));
-		    }
-		}
-
-		return Err(String::from("Could not match closing tag: ") + &element.name);
-	    }
-
-
-	    let id :Id = element.id;
-
-	    parent.children_stack.push(id);
-	    element.children_stack.push(id);
-	    elements_table.push(element);
-	    return Element::new(elements_table, Some(id), trimmed_input);
-	}
-
-	element.id = 0;
-
-	if is_closed {
-	    elements_table.push(element);
-	    return Ok(( None, trimmed_input));
-	}
-
-	if is_closing {
-	    return Err(String::from("Could not match closing tag: ") + &element.name);
-	}
-
-	element.children_stack.push(element.id);
-	elements_table.push(element);
-
-	loop {
-	    match Element::new(elements_table, Some(0), trimmed_input) {
-		Ok((opt, input)) => {
-		    let element_ptr = &mut elements_table[0];
-
-		    if let Some(res_element) = opt {
-			if res_element.name != element_ptr.name {
-			    element_ptr.children.push_back(res_element.id);
-			    elements_table.push(res_element);
-			} else {
-			    return Ok((None, input));
-			}
-		    }
-		    
-		    trimmed_input = input;
-		},
-		Err(e) => return Err(e)
-	    };
-	}
-
+ 	}
     }
 }
 
 
-
 #[derive(Debug, PartialEq)]
-struct ElementTree {
+pub struct ElementTree {
     root_id: Id,
-    elements_table: Vec<Element>
+    elements: Vec<Element>
 }
 
 
-impl fmt::Display for ElementTree {
-    fn fmt(&self, f :&mut fmt::Formatter<'_>) -> fmt::Result {
-	let mut cursor = &self.elements_table[self.root_id];
-	let mut element_stack :VecDeque<Id> = VecDeque::new();
+impl ToString for ElementTree {
+    fn to_string(&self) -> String {
+	let mut cursor :&Element;
+	
+	match self.elements.iter().nth(self.root_id) {
+	    Some(element) => cursor = element,
+	    None => return String::new(),
+	};
 
-	cursor
-	    .children
-	    .iter()
-	    .for_each(|element| {
-		element_stack.push_back(*element);
-	    });
+	let mut element_stack :VecDeque<&Id> = VecDeque::from([&cursor.id]);
+
+	let mut result = String::new();
 
 	while let Some(element) = element_stack.pop_front() {
-	    cursor = &self.elements_table[element];
+	    let mut depth_arrow = String::from("> ");
+
+	    cursor = &self.elements.iter().nth(*element).unwrap();
+
 	    cursor
 		.children
 		.iter()
 		.for_each(|child| {
-		    element_stack.push_back(*child);
+		    element_stack.push_back(child);
 		});
-	    
-	    if let Err(e) = write!(f, "-> {}\n", cursor.name) {
-		return Err(e);
+
+	    for _ in 0..cursor.depth {
+		depth_arrow = "-".to_string() + &depth_arrow;
 	    }
+
+	    result.push_str(&depth_arrow);
+	    result.push_str(&cursor.name);
+	    result.push('\n');
 	};
 
-	return Ok(());
+	return result;
     }
 }
 
 
 impl ElementTree {
-    fn new(input :&str) -> Result<ElementTree, String> {
+    pub fn parse(original_input :&str) -> Result<ElementTree, String> {
 	let mut element_tree = ElementTree {
 	    root_id: 0,
-	    elements_table: Vec::new()
+	    elements: Vec::new(),
 	};
-	    
-	match Element::new(&mut element_tree.elements_table, None, input) {
-	    Ok((_, input)) => {
-		if input != "" {
-		    return Err(String::from("Could not parse rest of input: ") + input);
+
+	let mut unclosed_elements_stack :Vec<Id> = Vec::new();
+	let mut parent_id :Option<Id> = None;
+	let mut current_id :Id = 0;
+	let mut depth :usize = 0;
+
+	let mut input = original_input;
+
+	while input != "" {
+	    match Element::parse(current_id, input) {
+		Ok(element_state) => {
+		    match element_state {
+			ElementState::Opening((mut element, rest_of_input)) => {
+			    element.parent_id = parent_id;
+			    
+			    depth += 1;
+			    element.depth = depth;
+			    
+			    element_tree.elements.push(element);
+			    input = rest_of_input.trim_start();
+
+			    unclosed_elements_stack.push(current_id);
+			    
+			    if let Some(id) = parent_id {
+				if let Some(parent) = element_tree.elements.iter_mut().nth(id) {
+				    parent.children.push(current_id);
+				}
+			    }
+
+			    parent_id = Some(current_id);
+			},
+			
+			ElementState::SelfClosing((mut element, rest_of_input)) => {
+			    element.parent_id = parent_id;
+
+			    element.depth = depth + 1;
+			    
+			    element_tree.elements.push(element);
+			    input = rest_of_input.trim_start();
+
+			    if let Some(id) = parent_id {
+				if let Some(parent) = element_tree.elements.iter_mut().nth(id) {
+				    parent.children.push(current_id);
+				}
+			    }
+			},
+			
+			ElementState::Closing((element, rest_of_input)) => {
+			    if element_tree.elements.is_empty() {
+				return Err(String::from("Closing tag missing opening tag! Element: ")
+					   + &element.name);
+			    }
+			    
+			    if let Some(prev_element_id) = unclosed_elements_stack.pop() {
+				if let Some(prev_element) =
+				    element_tree.elements.iter().nth(prev_element_id)
+				{
+				    if prev_element.name != element.name {
+					return Err(
+					    String::from("Opening and closing tag mismatch! Expected: ")
+						+ &prev_element.name
+						+ ", found: "
+						+ &element.name
+					);
+				    } else {
+					input = rest_of_input.trim_start();
+					parent_id = prev_element.parent_id;
+					depth -= 1;
+					continue;
+				    }
+				}
+			    }
+			},
+			    
+			ElementState::None => {
+			    break;
+			}
+		    }
+		},
+		Err(e) => {
+		    return Err(e)
 		}
-
-		return Ok(element_tree);
-	    },
-
-	    Err(e) => {
-		return Err(e);
 	    }
-	};
+
+	    current_id += 1;
+	}
+	
+	return Ok(element_tree);
     }
 }
 

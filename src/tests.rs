@@ -3,40 +3,48 @@ use super::*;
 
 #[test]
 fn test_attribute_parsing() {
-    let mut element = Element {
-	id: 0,
-	name: String::new(),
-	attributes: Vec::new(),
-	parent_id: None,
-	children: VecDeque::new(),
-	children_stack: Vec::new(),
+    let attribute = Attribute {
+	key: String::from("name"),
+	value: Some(String::from("jester")),
     };
 
-    assert_eq!(Ok(AttributeEnding::Unfinished("")), Attribute::parse(&mut element, "name=jester "));
-    assert_eq!(Ok(AttributeEnding::SelfClosing("")), Attribute::parse(&mut element, "name=jester/>"));
-    assert_eq!(Ok(AttributeEnding::RequiresClosing("")), Attribute::parse(&mut element, "name=jester>"));
-    
+    assert_eq!(Ok(AttributeEnding::Unfinished((attribute.clone(), ""))), Attribute::parse("name=jester "));
+    assert_eq!(Ok(AttributeEnding::SelfClosing((attribute.clone(), ""))), Attribute::parse("name=jester/>"));
+    assert_eq!(Ok(AttributeEnding::RequiresClosing((attribute, ""))), Attribute::parse("name=jester>"));
+    assert_eq!(Ok(AttributeEnding::None), Attribute::parse(""));
+}
+
+
+#[test]
+fn test_element_parsing() {
+    let element = Element {
+	id: 0,
+	name: String::from("root"),
+	attributes: Vec::new(),
+	parent_id: None,
+	depth: 0,
+	children: Vec::new()
+    };
+
+    assert_eq!(Ok(ElementState::Opening((element.clone(), "</root>"))), Element::parse(0, "<root></root>"));
+    assert_eq!(Ok(ElementState::Closing((element.clone(), ""))), Element::parse(0, "</root>"));
+    assert_eq!(Ok(ElementState::SelfClosing((element, ""))), Element::parse(0, "<root />"));
+    assert_eq!(Ok(ElementState::None), Element::parse(0, "<>"));
 }
 
 
 #[test]
 fn test_element_tree() {
-
-    let solution = ElementTree {
+    let mut solution = ElementTree {
 	root_id: 0,
-	elements_table: vec![
+	elements: vec![
 	    Element {
 		id: 0,
 		name: String::from("root"),
-		attributes: vec![
-		    Attribute {
-			key: String::new(),
-			value: None,
-		    }
-		],
+		attributes: Vec::new(),
 		parent_id: None,
-		children: VecDeque::from([1]),
-		children_stack: Vec::new(),
+		depth: 1,
+		children: Vec::from([1]),
 	    },
 
 	    Element {
@@ -49,29 +57,36 @@ fn test_element_tree() {
 		    }
 		],
 		parent_id: Some(0),
-		children: VecDeque::from([2]),
-		children_stack: Vec::new(),
+		depth: 2,
+		children: Vec::from([2]),
 	    },
 
 	    Element {
 		id: 2,
 		name: String::from("img"),
-		attributes: vec![
-		    Attribute {
-			key: String::new(),
-			value: None
-		    }
-		],
+		attributes: Vec::new(),
 		parent_id: Some(1),
-		children: VecDeque::new(),
-		children_stack: Vec::new(),
+		depth: 3,
+		children: Vec::new(),
 	    }
 	]
     };
 
-    let et = ElementTree::new("<root><text width=5><img /></text></root>").unwrap();
-    assert_eq!(solution, et);
-    assert_eq!("root", et.elements_table[0].name);
-    assert_eq!("text", et.elements_table[1].name);
-    assert_eq!("img", et.elements_table[2].name);
+    assert_eq!(Ok(solution), ElementTree::parse("<root><text width=5><img /></text></root>"));
+
+    solution = ElementTree {
+	root_id: 0,
+	elements: vec![
+	    Element {
+		id: 0,
+		name: String::from("root"),
+		attributes: Vec::new(),
+		parent_id: None,
+		depth: 1,
+		children: Vec::new()
+	    }
+	]
+    };
+
+    assert_eq!(Ok(solution), ElementTree::parse("<root></root>"));
 }
