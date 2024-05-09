@@ -4,7 +4,7 @@
 A basic interpreter for XML which returns the structure of the XML
 input as a tree. The program supports:
 - Element name and their corresponding closing tags (alphabetical characters only)
-- Attributes (key-value pair, the =""= are not supported)
+- Attributes (key-value pair, the "" are not supported)
 - Self-closing tags
 - Nesting
 
