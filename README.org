@@ -1,0 +1,26 @@
+#+title: XML Interpreter
+#+author: Rumen Mitov
+
+A basic interpreter for XML which returns the structure of the XML
+input as a tree. The program supports:
+- Element name and their corresponding closing tags (alphabetical characters only)
+- Attributes (key-value pair, the =""= are not supported)
+- Self-closing tags
+- Nesting
+
+
+* Example
+
+#+begin_src xml
+  <p>
+    <img width=10 height=5 />
+    <p>
+      <img />
+    </p>
+  </p>
+#+end_src
+
+
+* Testing
+
+You can find the unit tests in the =src/tests.rs= file.
