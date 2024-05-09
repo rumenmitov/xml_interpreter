@@ -1,3 +1,25 @@
+//! # XML Interpreter
+//!
+//!
+//! A basic interpreter for XML which returns the structure of the XML
+//! input as a tree. The program supports:
+//! - Element name and their corresponding closing tags (alphabetical characters only)
+//! - Attributes (key-value pair, the "" are not supported)
+//! - Self-closing tags
+//! - Nesting
+//! 
+//! 
+//! ## Example
+//! 
+//! ```xml
+//!   <p>
+//!     <img width=10 height=5 />
+//!     <p>
+//!       <img />
+//!     </p>
+//!   </p>
+//! ```xml
+
 use std::collections::{VecDeque, HashSet};
 
 type Id = usize;

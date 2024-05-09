@@ -10,7 +10,22 @@ fn main() {
     
     while let Some(arg) = iter_args.next() {
 	if arg == "-h" || arg == "--help" {
-	    println!("Help menu!");
+	    println!("
+--- XML Interpreter ---
+
+A basic interpreter for XML which returns the structure of the XML
+input as a tree. The program supports:
+- Element name and their corresponding closing tags (alphabetical characters only)
+- Attributes (key-value pair, the \"\" are not supported)
+- Self-closing tags
+- Nesting
+
+Usage:
+xml_interpreter path/to/file
+
+Options:
+-h, --help		displays this help menu
+");
 	    break;
 	}
 	
