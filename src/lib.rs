@@ -38,6 +38,23 @@ enum AttributeEnding<'a> {
     None,
 }
 
+
+impl ToString for Attribute {
+    fn to_string(&self) -> String {
+	let mut res = String::from("(");
+	res.push_str(&self.key);
+
+	if let Some(val) = &self.value {
+	    res.push_str(", ");
+	    res.push_str(val);
+	}
+
+	res.push(')');
+	return res;
+    }
+}
+
+
 impl<'a> Attribute {    
     fn is_empty(&self) -> bool {
 	self.key.is_empty() && self.value == None
@@ -273,6 +290,14 @@ impl ToString for ElementTree {
 
 	    result.push_str(&depth_arrow);
 	    result.push_str(&cursor.name);
+
+	    if !cursor.attributes.is_empty() {
+		result.push_str(" -");
+		for attr in &cursor.attributes {
+		    result.push(' ');
+		    result.push_str(&attr.to_string());
+		}
+	    }
 	    result.push('\n');
 	};
 
